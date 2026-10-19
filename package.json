@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/red-cup-engineering/computer-code-engineering-services-section.git",
-    "directory": "services/javascript-engineering-services-section/services/sandbox-command-execution-service"
+    "url": "git+https://github.com/red-cup-engineering/sandbox-command-execution-service.git"
   },
   "private": true,
   "type": "module",
