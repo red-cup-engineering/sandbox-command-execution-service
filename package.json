@@ -12,5 +12,10 @@
     "check": "node --check src/command-execution.mjs && node --check src/command-normalization.mjs",
     "test": "node --test test/command-execution.test.mjs test/command-normalization.test.mjs",
     "verify": "npm run check && npm test"
+  },
+  "license": "MIT",
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
   }
 }
