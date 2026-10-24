@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -123,4 +123,25 @@ test("one verification cannot escape its declared original customer Work directo
   assert.match(held.output,/artifact.mjs|not found|ENOENT/iu);
   // If the extraneous option had won, this test would wrongly approve the
   // different tenant's present file as the original Work result.
+});
+
+test("POSIX timeout signals the worker group so a shell/Node grandchild cannot continue billing Work", async (t) => {
+  if (process.platform === "win32") return t.skip("POSIX process groups are not available on Windows");
+  const root=mkdtempSync(join(tmpdir(),"union-executor-process-group-"));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  writeFileSync(join(root,"child.mjs"),
+    'import {writeFileSync} from "node:fs"; setTimeout(()=>writeFileSync("survived.txt","unsafe"),800);\n');
+  writeFileSync(join(root,"parent.mjs"),
+    'import {spawn} from "node:child_process"; import {writeFileSync} from "node:fs"; spawn(process.execPath,["child.mjs"],{stdio:"ignore"}); writeFileSync("started.txt","yes"); setInterval(()=>{},1000);\n');
+  const result=runTestsCommand(root,"node parent.mjs",
+    {shell:false,timeoutMs:350,maxOutputBytes:1024});
+  assert.equal(result.passed,false);
+  assert.equal(result.failureKind,"deadline");
+  assert.equal(existsSync(join(root,"started.txt")),true,
+    "the grandchild was actually started before parent cancellation");
+  assert.ok(["group-signal-sent","group-already-exited"].includes(result.processGroupCleanup),
+    "the terminated child process group must receive an explicit cleanup attempt");
+  await new Promise((resolve)=>setTimeout(resolve,1100));
+  assert.equal(existsSync(join(root,"survived.txt")),false,
+    "no orphaned original Work child should write after the owner deadline");
 });
