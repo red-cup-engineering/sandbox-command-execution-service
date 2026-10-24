@@ -46,7 +46,7 @@ test("source output is byte-bounded even if Node returns a final oversized chunk
 test("clean zero process exit alone is necessary but spawn errors also refuse", () => {
   const clean=normalizeCommandResult({status:0,signal:null});
   assert.deepEqual(normalizeVerificationResult(clean), {
-    passed:true,output:"exit=0\\n\\n\\n",failureKind:null
+    passed:true,output:"exit=0\n\n\n",failureKind:null
   });
   const contradictory=normalizeCommandResult({status:0,signal:null,error:{code:"EIO",message:"observer error"}});
   assert.equal(normalizeVerificationResult(contradictory).passed,false);
