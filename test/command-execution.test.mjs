@@ -111,3 +111,16 @@ test("one supplier owns original Work command limits, refusing silent shell or u
     {timeoutMs:1,shell:true},{timeoutMs:500,runAsRoot:true}])
     assert.throws(()=>admitCommandLimits(bad),/command limits|requires a finite/u);
 });
+
+test("one verification cannot escape its declared original customer Work directory by option precedence", () => {
+  const original=mkdtempSync(join(tmpdir(),"union-executor-original-work-"));
+  const external=mkdtempSync(join(tmpdir(),"union-executor-other-owner-"));
+  writeFileSync(join(external,"artifact.mjs"),"export const customer = 'other';\n");
+  const held=runTestsCommand(original,"node --check artifact.mjs",
+    {shell:false,cwd:external,timeoutMs:5000,maxOutputBytes:4096});
+  assert.equal(held.passed,false);
+  assert.equal(held.failureKind,"nonzero-exit");
+  assert.match(held.output,/artifact.mjs|not found|ENOENT/iu);
+  // If the extraneous option had won, this test would wrongly approve the
+  // different tenant's present file as the original Work result.
+});
