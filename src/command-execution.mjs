@@ -18,6 +18,21 @@ function admittedLimit(value, ceiling, label) {
   return value;
 }
 
+// The Work principal may name stricter wall/output ceilings. The original
+// supplier owns this policy once, so mission/intake consumers cannot silently
+// invent a separate command-budget grammar or accept a shell override.
+export function admitCommandLimits(input = {}) {
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).some(key => !["timeoutMs", "maxOutputBytes"].includes(key)))
+    throw new TypeError("command limits allow only timeoutMs and maxOutputBytes");
+  return Object.freeze({
+    timeoutMs: admittedLimit(input.timeoutMs ?? DEFAULT_COMMAND_LIMITS.timeoutMs,
+      MAX_TIMEOUT_MS, "timeoutMs"),
+    maxOutputBytes: admittedLimit(input.maxOutputBytes ?? DEFAULT_COMMAND_LIMITS.maxOutputBytes,
+      MAX_OUTPUT_BYTES, "maxOutputBytes"),
+  });
+}
+
 export function runCommand(command, {
   cwd, shell = "auto", signal,
   timeoutMs = DEFAULT_COMMAND_LIMITS.timeoutMs,
@@ -27,8 +42,9 @@ export function runCommand(command, {
     throw new TypeError("an original nonempty command string without NUL bytes is required");
   if (![false, true, "auto"].includes(shell))
     throw new TypeError("shell must be true, false, or auto");
-  admittedLimit(timeoutMs, MAX_TIMEOUT_MS, "timeoutMs");
-  admittedLimit(maxOutputBytes, MAX_OUTPUT_BYTES, "maxOutputBytes");
+  const commandLimits = admitCommandLimits({ timeoutMs, maxOutputBytes });
+  timeoutMs = commandLimits.timeoutMs;
+  maxOutputBytes = commandLimits.maxOutputBytes;
   if (signal !== undefined && (typeof signal !== "object" || typeof signal.aborted !== "boolean"))
     throw new TypeError("signal must be an AbortSignal-like object");
   if (signal?.aborted) throw signal.reason ?? new Error("command execution cancelled by customer");
