@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
-import { DEFAULT_COMMAND_LIMITS, runCommand, runTestsCommand } from "../src/command-execution.mjs";
+import { DEFAULT_COMMAND_LIMITS, admitCommandLimits, runCommand, runTestsCommand } from "../src/command-execution.mjs";
 
 test("nested node test verification executes instead of inheriting recursive-run suppression", () => {
   const root = mkdtempSync(join(tmpdir(), "union-executor-nested-test-"));
@@ -98,4 +98,16 @@ test("missing executable is a spawn failure, not an accepted empty task", () => 
   assert.equal(result.passed,false);
   assert.equal(result.failureKind,"spawn-error");
   assert.match(result.output,/ENOENT/u);
+});
+
+test("one supplier owns original Work command limits, refusing silent shell or unknown resource claims", () => {
+  const strict=admitCommandLimits({timeoutMs:1000,maxOutputBytes:2048});
+  assert.deepEqual(strict,{timeoutMs:1000,maxOutputBytes:2048});
+  assert.equal(Object.isFrozen(strict),true);
+  assert.deepEqual(admitCommandLimits(),DEFAULT_COMMAND_LIMITS);
+  assert.deepEqual(admitCommandLimits({timeoutMs:1000}),
+    {timeoutMs:1000,maxOutputBytes:DEFAULT_COMMAND_LIMITS.maxOutputBytes});
+  for(const bad of [null,[],{timeoutMs:0},{maxOutputBytes:Infinity},
+    {timeoutMs:1,shell:true},{timeoutMs:500,runAsRoot:true}])
+    assert.throws(()=>admitCommandLimits(bad),/command limits|requires a finite/u);
 });
