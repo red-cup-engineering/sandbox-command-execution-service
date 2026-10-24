@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
-import { runTestsCommand } from "../src/command-execution.mjs";
+import { DEFAULT_COMMAND_LIMITS, runCommand, runTestsCommand } from "../src/command-execution.mjs";
 
 test("nested node test verification executes instead of inheriting recursive-run suppression", () => {
   const root = mkdtempSync(join(tmpdir(), "union-executor-nested-test-"));
@@ -37,4 +37,65 @@ test("spawn failures remain visible to verification callers", () => {
   const result = runTestsCommand(tmpdir(), "command-that-does-not-exist-union-test", { shell: false });
   assert.equal(result.passed, false);
   assert.match(result.output, /ENOENT|not found/i);
+});
+
+test("a hanging original Work verification expires under a bounded wall-clock budget", () => {
+  const root=mkdtempSync(join(tmpdir(),"union-executor-deadline-"));
+  writeFileSync(join(root,"slow.mjs"), "setTimeout(() => {}, 30000);\\n");
+  const result=runTestsCommand(root,"node slow.mjs",{shell:false,timeoutMs:50,maxOutputBytes:4096});
+  assert.equal(result.passed,false);
+  assert.equal(result.failureKind,"deadline");
+  assert.match(result.output,/ETIMEDOUT/u);
+  assert.equal(result.limits.timeoutMs,50);
+  assert.equal(result.limits.maxOutputBytes,4096);
+  assert.ok(result.observedWallMs >= 0 && result.observedWallMs < 2000);
+});
+
+test("excessive child output is a refused result with locally bounded retained text", () => {
+  const root=mkdtempSync(join(tmpdir(),"union-executor-output-"));
+  writeFileSync(join(root,"noisy.mjs"),
+    'process.stdout.write("X".repeat(256*1024));\\n');
+  const result=runTestsCommand(root,"node noisy.mjs",{shell:false,maxOutputBytes:1024});
+  assert.equal(result.passed,false);
+  assert.equal(result.failureKind,"output-limit");
+  assert.match(result.output,/ENOBUFS/u);
+  assert.match(result.output,/cropped to declared/u);
+  assert.ok(result.output.length < 1500);
+  assert.equal(result.limits.maxOutputBytes,1024);
+});
+
+test("ordinary qualified verification receives its original clean result and actual wall observation", () => {
+  const root=mkdtempSync(join(tmpdir(),"union-executor-clean-"));
+  writeFileSync(join(root,"check.mjs"),"export const accepted = true;\\n");
+  const observed=runTestsCommand(root,"node --check check.mjs",{shell:false,timeoutMs:10000,maxOutputBytes:65536});
+  assert.equal(observed.passed,true,observed.output);
+  assert.equal(observed.failureKind,null);
+  assert.ok(Number.isSafeInteger(observed.observedWallMs)&&observed.observedWallMs>=0);
+  assert.deepEqual(observed.limits,{timeoutMs:10000,maxOutputBytes:65536,unit:"wall-ms-and-bytes-per-output-stream"});
+  assert.ok(DEFAULT_COMMAND_LIMITS.timeoutMs > 0);
+  assert.ok(Number.isFinite(DEFAULT_COMMAND_LIMITS.maxOutputBytes));
+});
+
+test("caller cannot disable bounded execution or smuggle shell syntax through explicit direct mode", () => {
+  for(const bad of [0,-1,NaN,Infinity,3.5,3_600_001,undefined]){
+    if(bad===undefined) continue; // absent means safe default, not unlimited
+    assert.throws(()=>runCommand("node --version",{timeoutMs:bad}),/timeoutMs requires/u);
+  }
+  for(const bad of [0,-1,Infinity,3.5,16*1024*1024+1])
+    assert.throws(()=>runCommand("node --version",{maxOutputBytes:bad}),/maxOutputBytes requires/u);
+  assert.throws(()=>runCommand("node --version && echo unexpected",{shell:false}),
+    /requires directly admitted arguments/u);
+  assert.throws(()=>runCommand("node --version",{shell:"untrusted"}),/shell must/u);
+  assert.throws(()=>runCommand("node --version",{signal:{}}),/signal must/u);
+  assert.throws(()=>runCommand("node --version",{signal:{aborted:true,reason:new Error("blocked before worker")}}),
+    /blocked before worker/u);
+  assert.throws(()=>runCommand("node\\0 --version"),/NUL bytes/u);
+  assert.throws(()=>runCommand(""),/nonempty/u);
+});
+
+test("missing executable is a spawn failure, not an accepted empty task", () => {
+  const result=runTestsCommand(tmpdir(),"nonexistent-org-receiving-xyz",{shell:false,timeoutMs:1000});
+  assert.equal(result.passed,false);
+  assert.equal(result.failureKind,"spawn-error");
+  assert.match(result.output,/ENOENT/u);
 });
