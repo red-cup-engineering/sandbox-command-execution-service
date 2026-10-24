@@ -88,7 +88,10 @@ export function runCommand(command, {
 // Run an original test/verify command; only a clean exit status 0 passes.
 // A timeout, excessive output, signal, or launch failure is NOT accepted Work.
 export function runTestsCommand(workdir, command, opts = {}) {
-  const run = runCommand(command, { cwd: workdir, ...opts });
+  // The original Work owns its declared execution directory. An extra option
+  // may tighten resource bounds, but must not move a verifier to another
+  // source territory through an accidental or adversarial cwd override.
+  const run = runCommand(command, { ...opts, cwd: workdir });
   return Object.freeze({
     ...normalizeVerificationResult(run),
     observedWallMs: run.observedWallMs,
