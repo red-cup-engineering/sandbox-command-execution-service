@@ -68,6 +68,10 @@ export function runCommand(command, {
     maxBuffer: maxOutputBytes, // Node applies this to EACH captured stream.
     timeout: timeoutMs,
     killSignal: "SIGKILL",
+    // On POSIX, keep this verification in its own process group. If the
+    // immediate worker times out or exhausts output, signal that group too;
+    // killing only a shell or Node parent can leave its grandchildren alive.
+    ...(process.platform === "win32" ? {} : { detached: true }),
     env: childEnvironment,
   };
   const started = process.hrtime.bigint();
@@ -78,8 +82,25 @@ export function runCommand(command, {
     ? spawnSync(argv[0], argv.slice(1), { ...common, shell: false })
     : spawnSync(command, { ...common, shell: true });
   const observedWallMs = Number((process.hrtime.bigint() - started) / 1_000_000n);
+  let processGroupCleanup = "not-required";
+  if (["ETIMEDOUT", "ENOBUFS"].includes(raw.error?.code)) {
+    if (process.platform === "win32" || !Number.isSafeInteger(raw.pid) || raw.pid < 1) {
+      processGroupCleanup = "not-supported";
+    } else {
+      try {
+        process.kill(-raw.pid, "SIGKILL");
+        processGroupCleanup = "group-signal-sent";
+      } catch (error) {
+        processGroupCleanup = error?.code === "ESRCH" ? "group-already-exited" : "group-signal-failed";
+      }
+    }
+  }
+  // This is a signal ATTEMPT, not proof that arbitrary detached descendants
+  // or hostile subprocesses are dead. Kernel cgroup/process-tree custody
+  // remains a separate host-owner obligation.
   return Object.freeze({
     ...normalizeCommandResult(raw, { maxOutputBytes }),
+    processGroupCleanup,
     observedWallMs,
     limits: Object.freeze({ timeoutMs, maxOutputBytes, unit: "wall-ms-and-bytes-per-output-stream" }),
   });
@@ -95,6 +116,7 @@ export function runTestsCommand(workdir, command, opts = {}) {
   return Object.freeze({
     ...normalizeVerificationResult(run),
     observedWallMs: run.observedWallMs,
+    processGroupCleanup: run.processGroupCleanup,
     limits: run.limits,
   });
 }
