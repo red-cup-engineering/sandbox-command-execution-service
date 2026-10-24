@@ -46,8 +46,14 @@ command resolves to this owner's own Node runtime rather than ambient
 **Honest remaining host limitations:** the synchronous call blocks its
 JavaScript caller, so a same-thread AbortSignal **cannot** be guaranteed
 to interrupt an already running child (preflight cancellation works).
-Shell child descendants are not necessarily killed when their parent
-terminates. OS CPU-memory/storage budgets, networking, effect isolation,
+On POSIX hosts, the command now has its own process group: after an actual
+timeout/output exhaustion, the adapter signals that group with SIGKILL and
+records `processGroupCleanup` as `group-signal-sent`,
+`group-already-exited`, or `group-signal-failed`. This reduces lingering
+child work, as tested with a real grandchild, but **does not** guarantee
+termination of escaped/detached descendants or a hostile process tree;
+Windows reports `not-supported` for that cleanup. OS CPU-memory/storage
+budgets, networking, effect isolation,
 workload admission, replication/quorum validation, retry/lease lifecycle,
 independent customer result acceptance, and real settlement must be
 provided and received separately. A successful test, low wall time, or a
@@ -58,10 +64,11 @@ configured deadline is not commercial revenue.
 `npm run verify` is the original native syntax and test suite. The
 bounded Work revision was tested as an exact GitHub snapshot on **Node
 22.16**, using `git hash-object` to match all four source/test blobs:
-**15 tests passed, zero failed**. Tests cover the original nested Node-test
+**16 tests passed, zero failed**. Tests cover the original nested Node-test
 behavior and PATH pinning as well as actual timed-out and noisy children,
 budget-policy refusal, output truncation, ambiguous signals, clean
-execution, and cross-tenant cwd override denial. The separate original
+execution, cross-tenant cwd override denial, and POSIX descendant cleanup under an
+actual elapsed deadline. The separate original
 [software mission receiving branch](https://github.com/red-cup-engineering/software-mission-execution-service)
 proposes carrying this same supplier's `failureKind`, limits and observed
 wall time through original Work actions, not a new scheduler or commerce rail.
