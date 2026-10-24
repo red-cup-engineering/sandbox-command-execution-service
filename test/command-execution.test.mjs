@@ -41,7 +41,7 @@ test("spawn failures remain visible to verification callers", () => {
 
 test("a hanging original Work verification expires under a bounded wall-clock budget", () => {
   const root=mkdtempSync(join(tmpdir(),"union-executor-deadline-"));
-  writeFileSync(join(root,"slow.mjs"), "setTimeout(() => {}, 30000);\\n");
+  writeFileSync(join(root,"slow.mjs"), "setTimeout(() => {}, 30000);\n");
   const result=runTestsCommand(root,"node slow.mjs",{shell:false,timeoutMs:50,maxOutputBytes:4096});
   assert.equal(result.passed,false);
   assert.equal(result.failureKind,"deadline");
@@ -54,7 +54,7 @@ test("a hanging original Work verification expires under a bounded wall-clock bu
 test("excessive child output is a refused result with locally bounded retained text", () => {
   const root=mkdtempSync(join(tmpdir(),"union-executor-output-"));
   writeFileSync(join(root,"noisy.mjs"),
-    'process.stdout.write("X".repeat(256*1024));\\n');
+    'process.stdout.write("X".repeat(256*1024));\n');
   const result=runTestsCommand(root,"node noisy.mjs",{shell:false,maxOutputBytes:1024});
   assert.equal(result.passed,false);
   assert.equal(result.failureKind,"output-limit");
@@ -66,7 +66,7 @@ test("excessive child output is a refused result with locally bounded retained t
 
 test("ordinary qualified verification receives its original clean result and actual wall observation", () => {
   const root=mkdtempSync(join(tmpdir(),"union-executor-clean-"));
-  writeFileSync(join(root,"check.mjs"),"export const accepted = true;\\n");
+  writeFileSync(join(root,"check.mjs"),"export const accepted = true;\n");
   const observed=runTestsCommand(root,"node --check check.mjs",{shell:false,timeoutMs:10000,maxOutputBytes:65536});
   assert.equal(observed.passed,true,observed.output);
   assert.equal(observed.failureKind,null);
@@ -89,7 +89,7 @@ test("caller cannot disable bounded execution or smuggle shell syntax through ex
   assert.throws(()=>runCommand("node --version",{signal:{}}),/signal must/u);
   assert.throws(()=>runCommand("node --version",{signal:{aborted:true,reason:new Error("blocked before worker")}}),
     /blocked before worker/u);
-  assert.throws(()=>runCommand("node\\0 --version"),/NUL bytes/u);
+  assert.throws(()=>runCommand("node\0 --version"),/NUL bytes/u);
   assert.throws(()=>runCommand(""),/nonempty/u);
 });
 
