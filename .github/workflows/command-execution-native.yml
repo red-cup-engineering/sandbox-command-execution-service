@@ -1,0 +1,38 @@
+name: Original bounded command verification receiving
+on:
+  pull_request:
+    paths:
+      - 'src/command-execution.mjs'
+      - 'src/command-normalization.mjs'
+      - 'test/command-execution.test.mjs'
+      - 'test/command-normalization.test.mjs'
+      - 'package.json'
+      - '.github/workflows/command-execution-native.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Fetch exact source without persisting credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Select supported original Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Check original source syntax and exercise actual bounded subprocesses
+        run: |
+          node --version
+          npm run verify
