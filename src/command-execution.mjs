@@ -11,7 +11,7 @@ export const DEFAULT_COMMAND_LIMITS = Object.freeze({
 const MAX_TIMEOUT_MS = 3_600_000;
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 
-function admittedLimit(value, ceiling, label) {
+function validatedLimit(value, ceiling, label) {
   if (!Number.isSafeInteger(value) || value < 1 || value > ceiling) {
     throw new TypeError(`${label} requires a finite positive integer at most ${ceiling}`);
   }
@@ -26,9 +26,9 @@ export function admitCommandLimits(input = {}) {
       Object.keys(input).some(key => !["timeoutMs", "maxOutputBytes"].includes(key)))
     throw new TypeError("command limits allow only timeoutMs and maxOutputBytes");
   return Object.freeze({
-    timeoutMs: admittedLimit(input.timeoutMs ?? DEFAULT_COMMAND_LIMITS.timeoutMs,
+    timeoutMs: validatedLimit(input.timeoutMs ?? DEFAULT_COMMAND_LIMITS.timeoutMs,
       MAX_TIMEOUT_MS, "timeoutMs"),
-    maxOutputBytes: admittedLimit(input.maxOutputBytes ?? DEFAULT_COMMAND_LIMITS.maxOutputBytes,
+    maxOutputBytes: validatedLimit(input.maxOutputBytes ?? DEFAULT_COMMAND_LIMITS.maxOutputBytes,
       MAX_OUTPUT_BYTES, "maxOutputBytes"),
   });
 }
